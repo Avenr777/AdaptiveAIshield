@@ -1,0 +1,4 @@
+anthropic>=0.40.0
+scikit-learn>=1.3.0   # required by blueteam's semantic layer (TF-IDF + cosine similarity)
+datasets>=2.19.0   # optional: only needed to pull the real public jailbreak dataset;
+                    # without it, dataset_library.py falls back to an offline sample

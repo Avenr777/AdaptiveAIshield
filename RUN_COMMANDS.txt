@@ -1,0 +1,24 @@
+# ==============================================================================
+# AIShield Benchmark — Exact Execution & Reproduction Commands
+# All runs are fully deterministic and reproducible via explicit pseudo-random seeds.
+# ==============================================================================
+
+# 1. Multi-Run Statistical Benchmark (N=10 runs x 6 rounds)
+# Generates: n_runs_summary_unlimited.json, n_runs_raw_unlimited.jsonl
+python run_n_times.py --n-runs 10 --rounds 6 --base-seed 42 --output n_runs_summary_unlimited.json --raw-output n_runs_raw_unlimited.jsonl
+
+# 2. Matched Two-Arm Comparison (Static Ablation vs. AIShield Adaptive, N=10 runs x 6 rounds)
+# Generates: compare_arms_metrics.json, compare_arms_raw.jsonl
+python compare_arms.py --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive --output compare_arms_metrics.json --raw-output compare_arms_raw.jsonl
+
+# 3. Mutation Depth Capping Experiment (Depths: 2, 4, 8, Unlimited across 10 runs x 6 rounds)
+# Generates: mutation_depth_comparison.json, depth_2_summary.json, depth_4_summary.json, depth_8_summary.json, depth_unlimited_summary.json
+python run_depth_experiment.py --n-runs 10 --rounds 6 --base-seed 42 --output mutation_depth_comparison.json
+
+# 4. Publication Figures & LaTeX Table Generation
+# Generates: publication_figures/*.png, publication_figures/*.pdf, publication_figures/table_benchmark_summary.tex
+python generate_publication_figures.py
+
+# 5. Provenance & Mathematical Integrity Verification
+# Recomputes all summary stats from raw logs and verifies markdown tables in RESULTS.md
+python verify_report.py --results-doc RESULTS.md

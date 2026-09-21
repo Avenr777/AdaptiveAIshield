@@ -1,0 +1,43 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Local runtime / caches
+*.log
+*.tmp
+*.temp
+.cache/
+
+# Test / benchmark output artifacts
+full_loop_metrics.json
+full_loop_corpus.json
+*.jsonl
+*.json
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment secrets
+.env
+.env.*
+
+# Generated publication artifacts
+publication_figures/
