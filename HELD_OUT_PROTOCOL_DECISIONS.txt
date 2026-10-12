@@ -1,0 +1,84 @@
+# AIShield: Pre-Registered Held-Out Evaluation Protocol
+# Date: 2026-10-11
+# Rule Zero: Decisions are documented here prior to running held-out evaluation.
+# System code, weights, training data, and thresholds are FROZEN (see FROZEN.txt).
+
+================================================================================
+1. PRE-REGISTERED SYSTEM DECISIONS (NO CHANGES PERMITTED AFTER THIS)
+================================================================================
+
+1.1 Firewall Configuration (AIShield-Static):
+- Ingress Normalization: 9-step normalization pipeline (NFKC, homoglyphs, whitespace collapse, hex/b64 decoding, leetspeak reversal).
+- Layer Weights: Lexical = 0.35, Semantic = 0.45, Context = 0.20 (single-turn: active layer renormalization over Lexical and Semantic; Context = 0.0).
+- Max-Fusion Trigger: S_l >= 85 raises final fast_score to max(S_l).
+- Hard Veto: Lexical score >= 85 triggers BLOCK.
+- BandConfig v2 (frozen on validation split val.jsonl):
+    * Safe / Allow: score < 30.0
+    * Warn / Flagged: 30.0 <= score <= 75.0
+    * Block: score > 75.0
+    * Decision mapping: ALLOW -> Benign (0), WARN/BLOCK -> Attack (1)
+- Classifier Backend: models/aishield_classifier/classical_pipeline.joblib (SHA256 in FROZEN.txt)
+
+1.2 Threshold Decision Rule:
+- Fixed decision threshold: T = 30.0 (any prompt scoring >= 30.0 is classified as attack / positive).
+- Zero threshold tuning on any held-out test data.
+
+================================================================================
+2. DATASETS TO EVALUATE
+================================================================================
+
+2.1 Main Held-Out Test (Dataset 1):
+- Repository: xTRam1/safe-guard-prompt-injection
+- Split: "test" split only
+- Label Mapping: label 1 = attack, label 0 = benign
+
+2.2 Second Held-Out Test (Dataset 2):
+- Repository: rogue-security/prompt-injections-benchmark
+- Split: "test" split
+- Label Mapping: "jailbreak" -> 1, "benign" -> 0
+
+2.3 Over-Defense & FPR Benchmark (Dataset 3):
+- Repository: leolee99/NotInject
+- Split: all subsets (one-trigger, two-trigger, three-trigger)
+- Label Mapping: all rows -> 0 (benign); evaluates False Positive Rate only
+
+2.4 Development Baseline (Clearly labeled as Dev in paper):
+- Kaggle cyberprince 500 benchmark (historical reference)
+
+================================================================================
+3. CONTAMINATION AUDIT PROTOCOL
+================================================================================
+
+- Any held-out sample with exact match against data/train.jsonl or data/val.jsonl (lowercased, whitespace-normalized) will be EXCLUDED.
+- Word-level bigram Jaccard >= 0.80 or TF-IDF cosine >= 0.95 will be audited and flagged.
+- Excluded count will be explicitly reported in contamination_report.json and the manuscript.
+
+================================================================================
+4. BASELINES TO EVALUATE UNDER IDENTICAL CONDITIONS
+================================================================================
+
+1. AIShield-Static (Proposed) [Trained on data/train.jsonl]
+2. TF-IDF + Logistic Regression [Trained on data/train.jsonl]
+3. ProtectAI DeBERTa-v3 v2 (protectai/deberta-v3-base-prompt-injection-v2) [Zero-shot]
+4. Meta Llama Prompt Guard 86M (meta-llama/Prompt-Guard-86M) [Zero-shot]
+   - Evaluated under both official get_jailbreak_score mode (threshold=0.5) and argmax mode.
+5. Real PIGuard (leolee99/PIGuard) [Zero-shot, trust_remote_code=True]
+6. TF-IDF Similarity Memory Baseline (formerly labeled Rebuff-style memory) [Zero-shot]
+
+================================================================================
+5. PRE-REGISTERED METRICS & STATISTICAL TESTS
+================================================================================
+
+- Primary Metrics:
+    * AUROC (Area under ROC curve, threshold-free)
+    * PR-AUC (Precision-Recall AUC, threshold-free)
+    * TPR at fixed FPR of 1.0% (TPR@1%FPR)
+    * Detection Rate (Recall), FPR, Precision, and F1 at fixed frozen threshold T=30.0
+- Statistical Rigor:
+    * Wilson 95% score intervals for proportions (Detection Rate, FPR)
+    * Bootstrap 95% intervals (2,000 resamples, seed=42) for AUROC and F1
+    * Paired McNemar's exact test comparing AIShield-Static against every baseline on matched prompts
+- Latency Profiling:
+    * Batch size = 1, single prompt
+    * 50 warmup iterations discarded, 1,000 timed evaluations
+    * Reporting p50, p95, p99 latency including full preprocessing and tokenization

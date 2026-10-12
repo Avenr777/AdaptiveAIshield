@@ -5,11 +5,11 @@
 
 # 1. Multi-Run Statistical Benchmark (N=10 runs x 6 rounds)
 # Generates: n_runs_summary_unlimited.json, n_runs_raw_unlimited.jsonl
-python run_n_times.py --n-runs 10 --rounds 6 --base-seed 42 --output n_runs_summary_unlimited.json --raw-output n_runs_raw_unlimited.jsonl
+python run_n_times.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42 --output n_runs_summary_unlimited.json --raw-output n_runs_raw_unlimited.jsonl
 
 # 2. Matched Two-Arm Comparison (Static Ablation vs. AIShield Adaptive, N=10 runs x 6 rounds)
 # Generates: compare_arms_metrics.json, compare_arms_raw.jsonl
-python compare_arms.py --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive --output compare_arms_metrics.json --raw-output compare_arms_raw.jsonl
+python compare_arms.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive --output compare_arms_metrics.json --raw-output compare_arms_raw.jsonl
 
 # 3. Mutation Depth Capping Experiment (Depths: 2, 4, 8, Unlimited across 10 runs x 6 rounds)
 # Generates: mutation_depth_comparison.json, depth_2_summary.json, depth_4_summary.json, depth_8_summary.json, depth_unlimited_summary.json

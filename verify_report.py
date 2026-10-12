@@ -127,6 +127,7 @@ def extract_numbers_from_str(s: str) -> List[float]:
     """Extracts all floats/ints from a string like '$28.3 \\pm 8.7 [\\pm 6.2]$'."""
     clean = s.replace("$", "").replace("\\pm", " ").replace("±", " ").replace("+/-", " ")
     clean = clean.replace("[", " ").replace("]", " ").replace("%", " ")
+    clean = clean.replace("*", " ").replace("\\", " ")
     tokens = clean.split()
     nums = []
     for t in tokens:
@@ -210,11 +211,10 @@ def main():
         "n_runs_raw_unlimited.jsonl",
         "compare_arms_metrics.json",
         "compare_arms_raw.jsonl",
-        "mutation_depth_comparison.json",
-        "depth_2_summary.json",
-        "depth_4_summary.json",
-        "depth_8_summary.json",
-        "depth_unlimited_summary.json",
+        "strong_baselines_benchmark.json",
+        "layer_ablation_results.json",
+        "validation_calibration_metrics.json",
+        "heldout_evaluation_results.json",
     ]
 
     file_errors = verify_file_existence(cited_files)

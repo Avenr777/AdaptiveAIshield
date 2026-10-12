@@ -107,12 +107,17 @@ class PromptFirewall:
         weights: Optional[Dict[str, float]] = None,
         bands: Optional[BandConfig] = None,
         veto_mode: bool = True,
+        backend=None,                # explicit override; default=None → auto-select
     ):
         self.corpus = AttackCorpus(path=corpus_path)
         self.weights = weights or DEFAULT_WEIGHTS
         self.bands = bands or DEFAULT_BANDS
         self.veto_mode = veto_mode
-        self.semantic_backend_name = semantic_layer._get_backend().name
+        # Each firewall instance owns its backend — created at construction
+        # time so that env-var changes between benchmark configs take effect.
+        from .semantic_backends import get_default_backend as _gdb
+        self._backend = backend if backend is not None else _gdb()
+        self.semantic_backend_name = self._backend.name
 
     # ------------------------------------------------------------------
     # Public API
@@ -155,55 +160,91 @@ class PromptFirewall:
         scanning_texts = [normalized_current] + extra_texts
 
         # ==================================================================
-        # Stage 1 — Lexical (always runs, fast)
+        # Stage 1 — Lexical (only runs if weight > 0)
         # ==================================================================
-        t0 = time.perf_counter()
-        lex_scores = [lexical_layer.score(t) for t in scanning_texts]
-        lex_score = max(lex_scores, key=lambda s: s.score)
-        lex_score.latency_ms = (time.perf_counter() - t0) * 1000
-        layer_scores.append(lex_score)
-        latencies["lexical"] = lex_score.latency_ms
+        if self.weights.get("lexical", 0.0) > 0.0:
+            t0 = time.perf_counter()
+            lex_scores = [lexical_layer.score(t) for t in scanning_texts]
+            lex_score = max(lex_scores, key=lambda s: s.score)
+            lex_score.latency_ms = (time.perf_counter() - t0) * 1000
+            layer_scores.append(lex_score)
+            latencies["lexical"] = lex_score.latency_ms
 
-        # Early-exit veto check on lexical alone (§1)
-        if self.veto_mode and lex_score.score >= self.bands.veto_threshold:
-            veto_triggered = True
+            # Early-exit veto check on lexical alone (§1)
+            if self.veto_mode and lex_score.score >= self.bands.veto_threshold:
+                veto_triggered = True
+        else:
+            lex_score = LayerScore(layer="lexical", score=0.0, reasons=["Lexical layer disabled/ablated."], latency_ms=0.0)
 
         # ==================================================================
-        # Stage 2 — Semantic / Embedding (always runs unless already vetoed)
+        # Stage 2 — Semantic / Embedding (only runs if weight > 0)
         # ==================================================================
-        t0 = time.perf_counter()
-        sem_scores = [semantic_layer.score(t, self.corpus) for t in scanning_texts]
-        sem_score = max(sem_scores, key=lambda s: s.score)
-        sem_score.latency_ms = (time.perf_counter() - t0) * 1000
-        layer_scores.append(sem_score)
-        latencies["semantic"] = sem_score.latency_ms
+        if self.weights.get("semantic", 0.0) > 0.0:
+            t0 = time.perf_counter()
+            sem_scores = [semantic_layer.score(t, self.corpus, backend=self._backend) for t in scanning_texts]
+            sem_score = max(sem_scores, key=lambda s: s.score)
+            sem_score.latency_ms = (time.perf_counter() - t0) * 1000
+            layer_scores.append(sem_score)
+            latencies["semantic"] = sem_score.latency_ms
 
-        # Veto check on semantic (§1)
-        if self.veto_mode and sem_score.score >= self.bands.veto_threshold:
-            veto_triggered = True
+            # Veto check on semantic (§1)
+            if self.veto_mode and sem_score.score >= self.bands.veto_threshold:
+                veto_triggered = True
+        else:
+            sem_score = LayerScore(layer="semantic", score=0.0, reasons=["Semantic layer disabled/ablated."], latency_ms=0.0)
 
         # ==================================================================
         # Context layer (conversation escalation signal)
         # ==================================================================
-        t0 = time.perf_counter()
-        current_turn_fast = (
-            lex_score.score * self.weights["lexical"] / (self.weights["lexical"] + self.weights["semantic"])
-            + sem_score.score * self.weights["semantic"] / (self.weights["lexical"] + self.weights["semantic"])
-        )
-        normalized_turns = [normalize(t) for t in turns]
-        ctx_score = context_layer.score(normalized_turns, current_turn_fast)
-        ctx_score.latency_ms = (time.perf_counter() - t0) * 1000
-        layer_scores.append(ctx_score)
-        latencies["context"] = ctx_score.latency_ms
+        is_multi_turn = len(turns) > 1
+        if self.weights.get("context", 0.0) > 0.0 and is_multi_turn:
+            t0 = time.perf_counter()
+            denom = max(self.weights.get("lexical", 0.0) + self.weights.get("semantic", 0.0), 1e-6)
+            current_turn_fast = (
+                lex_score.score * self.weights.get("lexical", 0.0) / denom
+                + sem_score.score * self.weights.get("semantic", 0.0) / denom
+            )
+            normalized_turns = [normalize(t) for t in turns]
+            ctx_score = context_layer.score(normalized_turns, current_turn_fast)
+            ctx_score.latency_ms = (time.perf_counter() - t0) * 1000
+            layer_scores.append(ctx_score)
+            latencies["context"] = ctx_score.latency_ms
 
-        # Veto on context (§1)
-        if self.veto_mode and ctx_score.score >= self.bands.veto_threshold:
-            veto_triggered = True
+            # Veto on context (§1)
+            if self.veto_mode and ctx_score.score >= self.bands.veto_threshold:
+                veto_triggered = True
+        else:
+            ctx_score = LayerScore(layer="context", score=0.0, reasons=["Single-turn prompt; no conversation history to analyze."], latency_ms=0.0)
+            layer_scores.append(ctx_score)
+            latencies["context"] = 0.0
 
         # ==================================================================
-        # Weighted fast score (non-LLM)
+        # Active-layer weight renormalization & max-fusion (§1, C1, IC7)
         # ==================================================================
-        fast_score = sum(ls.score * self.weights[ls.layer] for ls in layer_scores)
+        # Determine active layers: context is inactive for single-turn inputs
+        active_layers = []
+        if self.weights.get("lexical", 0.0) > 0.0:
+            active_layers.append("lexical")
+        if self.weights.get("semantic", 0.0) > 0.0:
+            active_layers.append("semantic")
+        if self.weights.get("context", 0.0) > 0.0 and is_multi_turn:
+            active_layers.append("context")
+
+        if active_layers:
+            sum_active_w = sum(self.weights[l] for l in active_layers)
+            norm_weights = {l: self.weights[l] / sum_active_w for l in active_layers}
+            score_map = {ls.layer: ls.score for ls in layer_scores}
+            weighted_score = sum(norm_weights[l] * score_map.get(l, 0.0) for l in active_layers)
+            
+            # Max-fusion: if any active layer has high confidence (>= 85.0), allow it to elevate score
+            max_active_score = max((score_map.get(l, 0.0) for l in active_layers), default=0.0)
+            if max_active_score >= 85.0:
+                fast_score = max(weighted_score, max_active_score)
+            else:
+                fast_score = weighted_score
+        else:
+            fast_score = 0.0
+
         fast_score = min(fast_score, 100.0)
 
         # ==================================================================

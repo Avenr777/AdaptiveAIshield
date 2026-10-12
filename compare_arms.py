@@ -119,7 +119,9 @@ def run_single_trial(
     no_dataset: bool,
     n_dataset: int,
     max_mutation_depth: Optional[int],
+    backend: str = "tfidf",
 ) -> List[Dict[str, Any]]:
+    os.environ["SEMANTIC_BACKEND"] = backend
     random.seed(seed)
     try:
         import numpy as np
@@ -140,6 +142,7 @@ def run_single_trial(
 
     static_firewall = PromptFirewall(corpus_path=static_corpus_path, weights=static_weights)
     adaptive_firewall = PromptFirewall(corpus_path=adaptive_corpus_path)
+    print(f"  [seed {seed}] Firewall semantic backend: {adaptive_firewall.semantic_backend_name}")
 
     generator = RedTeamGenerator()
     batch = generator.generate_seed_batch(
@@ -218,7 +221,9 @@ def run_three_arm_trial(
     no_dataset: bool,
     n_dataset: int,
     max_mutation_depth: Optional[int],
+    backend: str = "tfidf",
 ) -> List[Dict[str, Any]]:
+    os.environ["SEMANTIC_BACKEND"] = backend
     """
     §13: Three-arm experiment.
       Arm A: Lexical-only, pure weighted (veto_mode=False for clean ablation).
@@ -256,6 +261,7 @@ def run_three_arm_trial(
     arm_b = PromptFirewall(corpus_path=arm_b_path)
     # Arm C: full ensemble, adaptive (learning ON).
     arm_c = PromptFirewall(corpus_path=arm_c_path)
+    print(f"  [seed {seed}] Firewall semantic backend: {arm_c.semantic_backend_name}")
 
     generator = RedTeamGenerator()
     batch = generator.generate_seed_batch(
@@ -358,9 +364,14 @@ def main():
                         help="Which arm drives Red Team evolution in two-arm mode (default: adaptive)")
     parser.add_argument("--three-arm", action="store_true",
                         help="§13: Run three-arm experiment (A=lexical, B=full-static, C=full-adaptive)")
+    parser.add_argument("--backend", type=str, required=True, choices=["tfidf", "custom", "anthropic"],
+                        help="Semantic similarity backend")
     parser.add_argument("--output", type=str, default="compare_arms_metrics.json", help="Summary JSON path")
     parser.add_argument("--raw-output", type=str, default="compare_arms_raw.jsonl", help="Raw per-run JSONL path")
     args = parser.parse_args()
+
+    os.environ["SEMANTIC_BACKEND"] = args.backend
+    print(f"Semantic similarity backend: {args.backend}")
 
     if args.three_arm:
         # ---- THREE-ARM MODE (§13) ----
@@ -395,6 +406,7 @@ def main():
                 no_dataset=args.no_dataset,
                 n_dataset=args.n_dataset,
                 max_mutation_depth=args.max_mutation_depth,
+                backend=args.backend,
             )
             all_trials_data.append({"run_index": run_idx, "seed": seed, "rounds": trial_result})
             with open(args.raw_output, "a", encoding="utf-8") as f:
@@ -468,6 +480,7 @@ def main():
             no_dataset=args.no_dataset,
             n_dataset=args.n_dataset,
             max_mutation_depth=args.max_mutation_depth,
+            backend=args.backend,
         )
         all_trials_data.append({"run_index": run_idx, "seed": seed, "rounds": trial_result})
 
@@ -563,6 +576,7 @@ def main():
             "driver": args.driver,
             "max_mutation_depth": args.max_mutation_depth,
             "min_sample_size": args.min_sample_size,
+            "semantic_backend": args.backend,
             "benign_set_size": len(HELD_OUT_BENIGN) + len(HELD_OUT_BENIGN_MULTITURN),
         },
         "summary_by_round": summary_by_round,

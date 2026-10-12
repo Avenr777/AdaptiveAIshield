@@ -50,15 +50,15 @@ def score(normalized_text: str, corpus: AttackCorpus, backend: SimilarityBackend
     top_attack_sim = attack_hits[0][1] if attack_hits else 0.0
     top_benign_sim = benign_hits[0][1] if benign_hits else 0.0
 
-    # §9: Label-aware scoring.
-    # Score is driven by similarity to known attacks, discounted if the
-    # prompt is *more* similar to a known-benign/research example (reduces
-    # false positives on prompts like "I'm studying prompt injection").
-    # Discount factor is 0.5 so benign similarity partially cancels attack
-    # similarity rather than zeroing it entirely (fail-safe).
-    net_signal = top_attack_sim - (0.5 * top_benign_sim)
-    net_signal = max(net_signal, 0.0)
-    points = min(net_signal * MAX_SCORE * 1.6, MAX_SCORE)  # cosine sims are usually < 0.6
+    # §9: Label-aware scoring for retrieval backends (e.g. TF-IDF / embeddings).
+    # For a parametric classifier (custom_classifier), top_attack_sim is already P(attack|x)
+    # where P(attack) = 1 - P(benign), so discounting by benign probability is not needed.
+    if backend.name == "custom_classifier":
+        points = min(top_attack_sim * MAX_SCORE, MAX_SCORE)
+    else:
+        net_signal = top_attack_sim - (0.5 * top_benign_sim)
+        net_signal = max(net_signal, 0.0)
+        points = min(net_signal * MAX_SCORE * 1.6, MAX_SCORE)
 
     reasons = []
     if top_attack_sim > 0.15 and attack_hits:

@@ -31,6 +31,8 @@ from reporting.flags import compute_stats, check_sample_size_flag, format_stat_w
 
 def main():
     parser = argparse.ArgumentParser(description="Run full_loop N times with varying seeds for statistical significance.")
+    parser.add_argument("--backend", type=str, required=True, choices=["tfidf", "custom", "anthropic"],
+                        help="Semantic similarity backend")
     parser.add_argument("--n-runs", type=int, default=10, help="Number of repeated runs")
     parser.add_argument("--rounds", type=int, default=6, help="Evaluation rounds per run")
     parser.add_argument("--base-seed", type=int, default=42, help="Starting random seed")
@@ -45,6 +47,8 @@ def main():
     parser.add_argument("--raw-output", type=str, default="n_runs_raw.jsonl", help="Raw per-run JSONL output")
     args = parser.parse_args()
 
+    os.environ["SEMANTIC_BACKEND"] = args.backend
+    print(f"Semantic similarity backend: {args.backend}")
     print(f"Starting {args.n_runs} runs x {args.rounds} rounds (base_seed={args.base_seed}, max_mutation_depth={args.max_mutation_depth})...")
 
     # Clear raw output file
@@ -69,6 +73,7 @@ def main():
             corpus_path=corpus_file,
             seed=seed,
             max_mutation_depth=args.max_mutation_depth,
+            backend=args.backend,
         )
 
         all_runs_data.append({"run_index": run_idx, "seed": seed, "rounds": run_result})
@@ -141,6 +146,7 @@ def main():
         "base_seed": args.base_seed,
         "max_mutation_depth": args.max_mutation_depth,
         "min_sample_size": args.min_sample_size,
+        "semantic_backend": args.backend,
         "summary_by_round": summary_by_round,
     }
 

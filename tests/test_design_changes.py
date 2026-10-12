@@ -205,13 +205,13 @@ class TestBandMapping:
 
     def test_allow_logged_band(self):
         from blueteam.schema import Action
-        for score in [25.1, 37.5, 50.0]:
+        for score in [25.1, 28.0, 30.0]:
             assert self.bands.map_score_to_action(score) == Action.ALLOW_LOGGED, \
                 f"score={score} should be ALLOW_LOGGED"
 
     def test_warn_band(self):
         from blueteam.schema import Action
-        for score in [50.1, 62.5, 75.0]:
+        for score in [30.1, 50.0, 62.5, 75.0]:
             assert self.bands.map_score_to_action(score) == Action.WARN, \
                 f"score={score} should be WARN"
 

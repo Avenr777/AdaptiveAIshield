@@ -40,6 +40,8 @@ All primary benchmarks in this report were conducted using the default, fully of
 - Character n-gram range: $(3, 5)$, boundary-aware character analysis (`char_wb`), weight $0.4$
 - Ensemble similarity: $S = 0.6 \cdot S_{\text{word}} + 0.4 \cdot S_{\text{char}}$
 
+*(Provenance Note: Benchmark numbers in Tables 1 and 2 were regenerated on September 30, 2026 using `run_n_times.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42` and `compare_arms.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive`).*
+
 *(Note on stronger backends: `SentenceTransformerBackend` and `AnthropicJudgeBackend`
 are implemented in `blueteam/semantic_backends.py` and documented as extensions
 requiring network/API access).*
@@ -50,19 +52,19 @@ requiring network/API access).*
 
 Command:
 ```bash
-python run_n_times.py --n-runs 10 --rounds 6 --base-seed 42 --output n_runs_summary_unlimited.json --raw-output n_runs_raw_unlimited.jsonl
+python run_n_times.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42 --output n_runs_summary_unlimited.json --raw-output n_runs_raw_unlimited.jsonl
 ```
 
 ### Table 1: Multi-Run Benchmark Metrics (10 Runs, Seeds 42–51)
 
 | Round | Batch Size ($n$) | Attack Success Rate (ASR %) | Detection Rate (%) | Benign FPR (%) | Learned Corpus Size |
 | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | $45.0 \pm 0.0$ | $56.5 \pm 3.9$ $[\pm 2.8]$ | $43.5 \pm 3.9$ $[\pm 2.8]$ | $0.0 \pm 0.0$ | $25.4 \pm 1.8$ |
-| **2** | $50.8 \pm 3.6$ | $2.2 \pm 2.4$ $[\pm 1.7]$ | $97.8 \pm 2.4$ $[\pm 1.7]$ | $0.0 \pm 0.0$ | $26.5 \pm 2.2$ |
-| **3** | $41.4 \pm 48.9$ | $31.4 \pm 35.3$ $[\pm 25.3]$ | $68.6 \pm 35.3$ $[\pm 25.3]$ | $0.0 \pm 0.0$ | $35.0 \pm 8.2$ |
-| **4** | $19.4 \pm 17.9$* | $46.6 \pm 31.5$ $[\pm 22.6]$ | $53.4 \pm 31.5$ $[\pm 22.6]$ | $0.0 \pm 0.0$ | $46.3 \pm 19.9$ |
-| **5** | $25.6 \pm 24.2$ | $37.8 \pm 27.0$ $[\pm 19.3]$ | $62.2 \pm 27.0$ $[\pm 19.3]$ | $0.1 \pm 0.2$ | $59.5 \pm 34.5$ |
-| **6** | $29.2 \pm 30.2$ | $45.8 \pm 37.2$ $[\pm 26.6]$ | $54.2 \pm 37.2$ $[\pm 26.6]$ | $0.1 \pm 0.2$ | $77.4 \pm 54.7$ |
+| **1** | $45.0 \pm 0.0$ | $56.5 \pm 3.4$ $[\pm 2.4]$ | $43.5 \pm 3.4$ $[\pm 2.4]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
+| **2** | $50.8 \pm 3.0$ | $12.2 \pm 5.1$ $[\pm 3.6]$ | $87.8 \pm 5.1$ $[\pm 3.6]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
+| **3** | $12.6 \pm 5.7$* | $97.6 \pm 5.5$ $[\pm 3.9]$ | $2.4 \pm 5.5$ $[\pm 3.9]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
+| **4** | $24.8 \pm 11.7$ | $96.5 \pm 4.8$ $[\pm 3.4]$ | $3.5 \pm 4.8$ $[\pm 3.4]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
+| **5** | $47.8 \pm 22.5$ | $99.6 \pm 1.2$ $[\pm 0.8]$ | $0.4 \pm 1.2$ $[\pm 0.8]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
+| **6** | $95.0 \pm 44.1$ | $99.2 \pm 1.3$ $[\pm 1.0]$ | $0.8 \pm 1.3$ $[\pm 1.0]$ | $0.0 \pm 0.0$ | $20.0 \pm 0.0$ |
 
 *\*Flagged: Mean $n < 20$. In rounds where detection is high, the survivor pool temporarily starves, reducing the sample size of mutated offspring.*
 
@@ -94,7 +96,7 @@ To prevent runaway mutation degradation, `--max-mutation-depth INT` was introduc
 
 Command:
 ```bash
-python compare_arms.py --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive
+python compare_arms.py --backend tfidf --n-runs 10 --rounds 6 --base-seed 42 --ablation lexical_only --driver adaptive
 ```
 
 To eliminate strawman comparisons, Arm 1 is configured as an **honest ablation of the identical firewall codebase**:
@@ -107,12 +109,12 @@ Both arms evaluate the **exact same attack batch** in each round ($n$ is strictl
 
 | Round | Matched $n$ | Static ASR (%) | Static Detection (%) | Static FPR (%) | AIShield ASR (%) | AIShield Detection (%) | AIShield FPR (%) | Corpus Size |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **1** | $27.4 \pm 9.3$ | $38.7 \pm 17.8\%$ | $61.3 \pm 17.8\%$ | $1.95\%$ (4/205) | **$32.4 \pm 19.9\%$** | **$67.6 \pm 19.9\%$** | **$0.00\%$ (0/205)** | $10.1 \pm 9.5$ |
-| **2** | $20.2 \pm 19.0$ | $95.3 \pm 7.9\%$ | $4.7 \pm 7.9\%$ | $1.95\%$ (4/205) | **$1.9 \pm 2.8\%$** | **$98.1 \pm 2.8\%$** | **$0.15\%$ (0.3/205)** | $10.6 \pm 10.0$ |
-| **3** | $13.8 \pm 15.4$* | $99.0 \pm 3.2\%$ | $1.0 \pm 3.2\%$ | $1.95\%$ (4/205) | **$21.6 \pm 29.9\%$** | **$78.4 \pm 29.9\%$** | **$0.15\%$ (0.3/205)** | $13.7 \pm 10.4$ |
-| **4** | $7.8 \pm 8.4$* | $100.0 \pm 0.0\%$ | $0.0 \pm 0.0\%$ | $1.95\%$ (4/205) | **$45.9 \pm 39.0\%$** | **$54.1 \pm 39.0\%$** | **$0.15\%$ (0.3/205)** | $17.6 \pm 13.1$ |
-| **5** | $9.2 \pm 10.8$* | $100.0 \pm 0.0\%$ | $0.0 \pm 0.0\%$ | $1.95\%$ (4/205) | **$41.0 \pm 38.7\%$** | **$59.0 \pm 38.7\%$** | **$0.15\%$ (0.3/205)** | $22.1 \pm 18.2$ |
-| **6** | $12.6 \pm 13.4$* | $100.0 \pm 0.0\%$ | $0.0 \pm 0.0\%$ | $1.95\%$ (4/205) | **$34.2 \pm 27.6\%$** | **$65.8 \pm 27.6\%$** | **$0.15\%$ (0.3/205)** | $27.5 \pm 25.4$ |
+| **1** | $45.0 \pm 0.0$ | $46.9 \pm 5.0\%$ | $53.1 \pm 5.0\%$ | 1.95% (4/205) | **$56.4 \pm 3.3\%$** | **$43.6 \pm 3.3\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
+| **2** | $50.8 \pm 3.0$ | $81.2 \pm 4.5\%$ | $18.8 \pm 4.5\%$ | 1.95% (4/205) | **$12.2 \pm 5.1\%$** | **$87.8 \pm 5.1\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
+| **3** | $12.6 \pm 5.7$* | $77.0 \pm 27.9\%$ | $23.0 \pm 27.9\%$ | 1.95% (4/205) | **$97.6 \pm 5.5\%$** | **$2.4 \pm 5.5\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
+| **4** | $24.8 \pm 11.7$ | $82.9 \pm 22.0\%$ | $17.1 \pm 22.0\%$ | 1.95% (4/205) | **$96.5 \pm 4.8\%$** | **$3.5 \pm 4.8\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
+| **5** | $47.8 \pm 22.5$ | $91.2 \pm 12.6\%$ | $8.8 \pm 12.6\%$ | 1.95% (4/205) | **$99.6 \pm 1.2\%$** | **$0.4 \pm 1.2\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
+| **6** | $95.0 \pm 44.1$ | $95.0 \pm 8.0\%$ | $5.0 \pm 8.0\%$ | 1.95% (4/205) | **$99.2 \pm 1.3\%$** | **$0.8 \pm 1.3\%$** | **0.00% (0/205)** | $20.0 \pm 0.0$ |
 
 ### Key Observations:
 1. **Ablation Failure Under Mutation:** A pure lexical filter collapses to $100\%$ ASR immediately in Round 2 once mutations are introduced, proving that rule-based pattern matching alone cannot withstand adversarial perturbation.

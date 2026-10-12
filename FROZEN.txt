@@ -1,0 +1,10 @@
+# AIShield System Freeze Certificate
+# Date: 2026-10-11T03:48:57.033443
+# Protocol: Rule Zero Pre-Registration (Held-Out Evaluation)
+
+data/train.jsonl 0f9cd2a290b1c48926182b7bb711b3834bb4d0f5710ad8793ac4a5fb8cf341e1
+data/val.jsonl c17de7fd23f950715f21314702b8603b93e562bd4f7800399a3015a44f915917
+models/aishield_classifier/classical_pipeline.joblib 8d0b0737b8a8f951fc0658aaf88704ee8cf0642eb65cf6256a50217f067c642b
+blueteam/firewall.py 1f6c48019594e2a35982a195aa56586b36ee77599ca45f6473f2b7335ba7d391
+blueteam/normalize.py 0265fc6103ed8a10c024f0e937250beb54889ec467fcfd24331bf07bdd4de9d1
+blueteam/schema.py 9c77875fd84028addac1daccfb27d6ee48c692c99c81004aa84bd789e637f5f4

@@ -55,6 +55,27 @@ class CorpusEntry(TypedDict):
     label: Literal["attack", "benign"]
 
 
+def check_poisoning_risk(text: str, benign_examples: List[str], threshold: float = 0.70) -> bool:
+    """
+    Check if a candidate attack is suspiciously similar to known benign examples.
+    High lexical overlap with benign anchors suggests a memory poisoning attack
+    attempting to force future false positives on benign traffic.
+    """
+    t_words = set(text.lower().split())
+    if not t_words:
+        return False
+    for b in benign_examples:
+        b_words = set(b.lower().split())
+        if not b_words:
+            continue
+        inter = len(t_words & b_words)
+        union = len(t_words | b_words)
+        jaccard = inter / union if union > 0 else 0.0
+        if jaccard >= threshold:
+            return True
+    return False
+
+
 class AttackCorpus:
     def __init__(self, path: str = "learned_attacks.json"):
         self.path = Path(path)
@@ -105,11 +126,16 @@ class AttackCorpus:
         §10: label_source is stored on every entry.
         §11: production_flag entries are auto-quarantined.
                Per-source rate limit enforced (MAX_ADDS_PER_BATCH).
+               Poisoning check: high overlap with benign anchors auto-quarantined.
 
         Returns True if entry was added, False if rate-limited or duplicate.
         """
         # Auto-quarantine production_flag entries (§11).
         if label_source == "production_flag":
+            quarantine = True
+
+        # Poisoning check: if prompt overlaps heavily with benign corpus, quarantine it (M11)
+        if not quarantine and check_poisoning_risk(text, self.benign_examples):
             quarantine = True
 
         # Rate limit per label_source (§11).

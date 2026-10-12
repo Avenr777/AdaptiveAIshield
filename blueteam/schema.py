@@ -25,7 +25,7 @@ Decision = Action
 class BandConfig:
     """Configurable threshold bands mapping risk scores (0-100) to actions."""
     safe_max: float = 25.0
-    low_max: float = 50.0
+    low_max: float = 30.0            # Phase 1A: Retuned from 50.0 to 30.0 (52.8% -> ~26% ASR)
     suspicious_max: float = 75.0
     veto_threshold: float = 85.0     # T_veto: any single non-LLM signal >= this forces BLOCK
 

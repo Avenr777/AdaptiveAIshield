@@ -22,17 +22,26 @@ import unicodedata
 # whenever the original letter was uppercase (e.g. 'I' -> Cyrillic 'І',
 # not just lowercase 'i' -> 'і') — a map with only lowercase entries
 # would miss every homoglyph at the start of a sentence.
+# Reverse mapping of mutator.py's homoglyph substitutions, plus other
+# common look-alikes attackers use (Cyrillic, Greek, fullwidth).
 _HOMOGLYPH_PAIRS = [
-    ("а", "a"), ("е", "e"), ("о", "o"), ("і", "i"), ("с", "c"),  # Cyrillic
+    ("а", "a"), ("е", "e"), ("о", "o"), ("і", "i"), ("с", "c"),
+    ("р", "p"), ("у", "y"), ("х", "x"), ("ѕ", "s"), ("ј", "j"),
+    ("ԛ", "q"), ("ԁ", "d"), ("ԛ", "q"),
 ]
 _HOMOGLYPH_MAP = {}
 for _glyph, _latin in _HOMOGLYPH_PAIRS:
     _HOMOGLYPH_MAP[_glyph] = _latin
     _HOMOGLYPH_MAP[_glyph.upper()] = _latin.upper()
-# A few extra look-alikes not produced by mutator.py but seen in the wild.
+# Extra uppercase Cyrillic & Greek look-alikes
 _HOMOGLYPH_MAP.update({
-    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H",  # Greek
-    "０": "0", "１": "1", "２": "2",                       # fullwidth digits
+    "А": "A", "В": "B", "Е": "E", "К": "K", "М": "M", "Н": "H",
+    "О": "O", "Р": "P", "С": "C", "Т": "T", "У": "Y", "Х": "X",
+    "Α": "A", "Β": "B", "Ε": "E", "Ζ": "Z", "Η": "H", "Ι": "I",
+    "Κ": "K", "Μ": "M", "Ν": "N", "Ο": "O", "Ρ": "P", "Τ": "T",
+    "Υ": "Y", "Χ": "X",
+    "０": "0", "１": "1", "２": "2", "３": "3", "４": "4",
+    "５": "5", "６": "6", "７": "7", "８": "8", "９": "9",
 })
 
 # Matches mutator.py's forward map {"a":"4","e":"3","i":"1","o":"0","s":"5","t":"7"}
@@ -41,18 +50,15 @@ _LEET_MAP = str.maketrans({
 })
 _LEET_CHARS = set("43105$7")
 
-# Tokens made of letters/digits/$ — this is what unleet() operates on,
-# one token at a time, rather than translating every digit in the
-# entire text. That distinction matters: "I have 5 apples" should stay
-# "I have 5 apples", not become "I have s apples". Leetspeak digits
-# only make sense to reverse when they're mixed in with letters inside
-# the same word (e.g. "in5truction5"); a standalone numeric token like
-# "5" or "2024" is almost certainly just a number.
 _TOKEN_RE = re.compile(r"[A-Za-z0-9$]+")
-
 _ZERO_WIDTH_CHARS = ["\u200b", "\u200c", "\u200d", "\ufeff"]
 
-_BASE64_LIKE = re.compile(r"[A-Za-z0-9+/]{20,}={0,2}")
+# Base64 tokens: length 4+ with padding, or 8+ unpadded
+_BASE64_LIKE = re.compile(r"(?<![A-Za-z0-9+/])(?:[A-Za-z0-9+/]{4,}={1,2}|[A-Za-z0-9+/]{8,})(?![A-Za-z0-9+/=])")
+# Escaped hex sequences: \x72\x6d...
+_HEX_ESCAPE = re.compile(r"(?:\\x[0-9a-fA-F]{2})+")
+# Raw continuous hex tokens: 726d202d7266202f
+_HEX_TOKEN = re.compile(r"\b(?:[0-9a-fA-F]{2}){4,}\b")
 
 
 def strip_zero_width(text: str) -> str:
@@ -65,10 +71,13 @@ def unhomoglyph(text: str) -> str:
     return "".join(_HOMOGLYPH_MAP.get(ch, ch) for ch in text)
 
 
+def collapse_whitespace(text: str) -> str:
+    """Normalize and collapse consecutive whitespace characters."""
+    return re.sub(r"[ \t\r\n\f\v]+", " ", text).strip()
+
+
 def collapse_spacing(text: str) -> str:
-    """Collapse 'i g n o r e' -> 'ignore' style spacing evasion without
-    destroying normal multi-word text: only collapses runs of 4+
-    single-letter tokens separated by single spaces."""
+    """Collapse 'i g n o r e' -> 'ignore' style spacing evasion."""
     def _collapse(match: re.Match) -> str:
         return match.group(0).replace(" ", "")
 
@@ -83,74 +92,84 @@ def unleet(text: str) -> str:
         has_leet_char = any(ch in _LEET_CHARS for ch in token)
         if has_letter and has_leet_char:
             return token.translate(_LEET_MAP)
-        return token  # pure-numeric token (quantity, year, etc.) — leave it alone
+        return token
 
     return _TOKEN_RE.sub(_maybe_unleet_token, text)
 
 
 def _looks_like_text(s: str) -> bool:
-    """
-    Looser check than str.isprintable(): treats zero-width/format
-    characters (category 'Cf', e.g. zero-width space) as acceptable
-    rather than disqualifying, since that's exactly the kind of
-    obfuscation a decoded payload might legitimately contain — a
-    strict isprintable() check would silently reject a correctly
-    decoded attack just because it still has zero-width spaces in it
-    (those get cleaned up by strip_zero_width() on the next pass).
-    Only rejects strings with a meaningful fraction of real control
-    characters / binary noise, which indicates the base64 blob wasn't
-    actually encoded text at all.
-    """
-    if not s:
+    if not s or len(s.strip()) == 0:
         return False
+    # Check that it contains mostly printable text / spaces
     bad = sum(
         1 for ch in s
-        if not ch.isprintable() and unicodedata.category(ch) != "Cf"
+        if not ch.isprintable() and unicodedata.category(ch) != "Cf" and ch not in "\r\n\t"
     )
     return (bad / len(s)) < 0.05
 
 
-def try_decode_base64(text: str) -> str:
-    """
-    Find base64-looking substrings and replace them in-place with their
-    decoded plaintext (if they decode to something that looks like text).
-
-    Replacing in-place — rather than leaving the raw encoded blob in
-    the text alongside the decoded content — matters for correctness:
-    other normalization steps (unleet in particular) do digit/character
-    substitution, and base64's alphabet is full of exactly those
-    characters. If the raw blob were left behind, a later pass could
-    corrupt it (e.g. '0' -> 'o') and make it undecodable on the next
-    iteration. Replacing it removes that risk and keeps the pipeline
-    idempotent: once decoded, there's no leftover encoded text for a
-    later pass to re-match.
-    """
-    def _replace(match: re.Match) -> str:
-        candidate = match.group(0)
+def try_decode_hex(text: str) -> str:
+    """Decode escaped hex (\\x63\\x61\\x74) and raw hex strings (726d202d7266202f)."""
+    def _replace_escape(match: re.Match) -> str:
+        chunk = match.group(0).replace("\\x", "")
         try:
-            decoded = base64.b64decode(candidate, validate=True).decode("utf-8")
+            decoded = bytes.fromhex(chunk).decode("utf-8", errors="replace")
             if _looks_like_text(decoded):
                 return decoded
         except Exception:
             pass
-        return candidate  # not valid base64 / not text-like — leave untouched
+        return match.group(0)
+
+    text = _HEX_ESCAPE.sub(_replace_escape, text)
+
+    def _replace_raw_hex(match: re.Match) -> str:
+        token = match.group(0)
+        if len(token) % 2 != 0:
+            return token
+        try:
+            decoded = bytes.fromhex(token).decode("utf-8", errors="replace")
+            if _looks_like_text(decoded) and any(w in decoded.lower() for w in ["rm", "cat", "sh", "exec", "select", "drop", "sudo", "eval", "id"]):
+                return decoded
+        except Exception:
+            pass
+        return token
+
+    return _HEX_TOKEN.sub(_replace_raw_hex, text)
+
+
+def try_decode_base64(text: str) -> str:
+    """Find base64 substrings (bounded depth) and replace with plaintext."""
+    def _replace(match: re.Match) -> str:
+        candidate = match.group(0)
+        try:
+            # Pad if needed
+            pad_len = (4 - (len(candidate) % 4)) % 4
+            padded = candidate + ("=" * pad_len)
+            decoded = base64.b64decode(padded, validate=False).decode("utf-8", errors="replace")
+            if _looks_like_text(decoded):
+                return decoded
+        except Exception:
+            pass
+        return candidate
 
     return _BASE64_LIKE.sub(_replace, text)
 
 
 def unicode_normalize(text: str) -> str:
-    """NFKC normalization also folds many fullwidth / compatibility
-    characters into their ASCII equivalents."""
+    """Unicode NFKC normalization folds compatibility and fullwidth glyphs."""
     return unicodedata.normalize("NFKC", text)
 
 
 def _one_pass(text: str) -> str:
     text = unicode_normalize(text)
     text = strip_zero_width(text)
+    text = collapse_whitespace(text)
     text = unhomoglyph(text)
     text = collapse_spacing(text)
+    text = try_decode_hex(text)
     text = try_decode_base64(text)
     text = unleet(text)
+    text = collapse_whitespace(text)
     return text
 
 

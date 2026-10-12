@@ -92,7 +92,11 @@ def run(
     corpus_path: str,
     seed: Optional[int] = None,
     max_mutation_depth: Optional[int] = None,
+    backend: Optional[str] = None,
 ):
+    if backend:
+        os.environ["SEMANTIC_BACKEND"] = backend
+
     import random
     if seed is None:
         seed = random.randint(0, 2**31 - 1)
@@ -111,6 +115,7 @@ def run(
     llm = pick_llm_client(use_llm)
     generator = RedTeamGenerator(llm=llm)
     firewall = PromptFirewall(corpus_path=corpus_path)
+    print(f"[firewall] Semantic backend initialized: {firewall.semantic_backend_name}")
 
     batch = generator.generate_seed_batch(
         round_number=1, include_dataset=use_dataset, n_dataset=n_dataset
@@ -171,6 +176,8 @@ def run(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--rounds", type=int, default=6)
+    parser.add_argument("--backend", type=str, required=True, choices=["tfidf", "custom", "anthropic"],
+                        help="Semantic similarity backend")
     parser.add_argument("--use-llm", action="store_true")
     parser.add_argument("--no-dataset", action="store_true")
     parser.add_argument("--n-dataset", type=int, default=30)
@@ -187,4 +194,5 @@ if __name__ == "__main__":
         args.corpus_path,
         seed=args.seed,
         max_mutation_depth=args.max_mutation_depth,
+        backend=args.backend,
     )

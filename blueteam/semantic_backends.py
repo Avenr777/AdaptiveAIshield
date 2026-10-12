@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import List, Tuple
 
 
@@ -211,6 +212,60 @@ class AnthropicJudgeBackend(SimilarityBackend):
         return [(0, sim)]
 
 
+class CustomClassifierBackend(SimilarityBackend):
+    """
+    Phase 3C: AIShield's custom trained classifier backend (OwnModelBackend).
+    Loads model from models/aishield_classifier/ (DeBERTa neural checkpoint or classical pipeline).
+    Outputs intent-level attack probability as semantic similarity.
+    """
+    name = "custom_classifier"
+
+    def __init__(self, model_dir: str = "models/aishield_classifier"):
+        self.model_dir = Path(model_dir)
+        self.pipeline = None
+        self.deberta_pipeline = None
+
+        # Check for DeBERTa checkpoint
+        if (self.model_dir / "config.json").exists():
+            try:
+                from transformers import pipeline
+                self.deberta_pipeline = pipeline("text-classification", model=str(self.model_dir))
+            except Exception:
+                self.deberta_pipeline = None
+
+        # Fallback to classical joblib pipeline
+        classical_path = self.model_dir / "classical_pipeline.joblib"
+        if self.deberta_pipeline is None and classical_path.exists():
+            import joblib
+            try:
+                self.pipeline = joblib.load(classical_path)
+            except Exception:
+                self.pipeline = None
+
+    def top_similarities(self, query: str, corpus_texts: List[str], top_k: int = 3):
+        if self.deberta_pipeline is not None:
+            try:
+                res = self.deberta_pipeline(query)[0]
+                label = res.get("label", "")
+                score = float(res.get("score", 0.0))
+                # If binary label is attack / LABEL_1
+                prob = score if label in ("LABEL_1", "attack", "ATTACK") else (1.0 - score)
+                return [(0, prob)]
+            except Exception:
+                pass
+
+        if self.pipeline is not None:
+            try:
+                # Class 1 is attack
+                probs = self.pipeline.predict_proba([query])[0]
+                attack_prob = float(probs[1]) if len(probs) > 1 else float(probs[0])
+                return [(0, attack_prob)]
+            except Exception:
+                pass
+
+        return []
+
+
 def get_default_backend() -> SimilarityBackend:
     """
     Auto-select the strongest available backend, unless overridden via
@@ -219,6 +274,12 @@ def get_default_backend() -> SimilarityBackend:
     isn't installed, falls back to TF-IDF rather than crashing.
     """
     forced = os.environ.get("SEMANTIC_BACKEND", "").strip().lower()
+
+    def _try_custom():
+        backend = CustomClassifierBackend()
+        if backend.pipeline is not None or backend.deberta_pipeline is not None:
+            return backend
+        return None
 
     def _try_anthropic():
         if os.environ.get("ANTHROPIC_API_KEY"):
@@ -231,6 +292,8 @@ def get_default_backend() -> SimilarityBackend:
         except ImportError:
             return None
 
+    if forced in ("custom", "own_model", "custom_model", "classifier"):
+        return _try_custom() or TfidfBackend()
     if forced == "anthropic":
         return _try_anthropic() or TfidfBackend()
     if forced in ("sentence-transformers", "sentence_transformers", "st"):
@@ -238,5 +301,6 @@ def get_default_backend() -> SimilarityBackend:
     if forced == "tfidf":
         return TfidfBackend()
 
-    # Auto: prefer strongest available.
-    return _try_anthropic() or _try_sentence_transformers() or TfidfBackend()
+    # Auto: prefer custom trained model if present, then anthropic, sentence-transformers, tfidf
+    return _try_custom() or _try_anthropic() or _try_sentence_transformers() or TfidfBackend()
+
