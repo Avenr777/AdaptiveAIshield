@@ -1,6 +1,11 @@
 # AIShield System Freeze Certificate
 # Date: 2026-10-11T03:48:57.033443
 # Protocol: Rule Zero Pre-Registration (Held-Out Evaluation)
+# Git Commit: 1348a060db3c9c852fc85cdbafe5e99e40940e79
+# Git Commit Date: Mon Oct 12 14:30:48 2026 +0530
+# Decisions File: HELD_OUT_PROTOCOL_DECISIONS.txt
+# Decisions File MTime (UTC): 2026-10-12T09:00:19.449410+00:00
+# Decisions File SHA-256: d1789c6293cb8bf26c3ecfef2ef39d73eb8b0a1d48c9006938a1cf71ea9171b9
 
 data/train.jsonl 0f9cd2a290b1c48926182b7bb711b3834bb4d0f5710ad8793ac4a5fb8cf341e1
 data/val.jsonl c17de7fd23f950715f21314702b8603b93e562bd4f7800399a3015a44f915917

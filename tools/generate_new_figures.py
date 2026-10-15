@@ -353,19 +353,20 @@ def fig_adversary_budget():
     systems = list(data.keys())
     sys_colors = {"Lexical-Only": "#d62728", "AIShield-Static": "#2ca02c",
                   "AIShield-Adaptive": "#9467bd"}
+    sys_markers = {"Lexical-Only": "x", "AIShield-Static": "o", "AIShield-Adaptive": "s"}
 
     fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-    fig.suptitle("Figure 5 — Black-Box Mutation-Guided Adversary: ASR vs Query Budget",
+    fig.suptitle("Figure 5 — Black-Box Adversary: Independent Query Budget Evaluations (B=1 to 50)",
                  fontsize=TITLE_SIZE, fontweight="bold")
 
-    # Panel A: ASR vs Budget (line chart)
+    # Panel A: ASR vs Budget (discrete points without connecting lines)
     ax = axes[0]
     for sys in systems:
         asrs = [data[sys][f"budget_{b}"]["asr_pct"] for b in budgets]
-        ax.plot(budgets, asrs, marker="o", label=sys, color=sys_colors.get(sys, "#333"),
-                linewidth=2, markersize=7)
-    ax.set_title("(A) Attack Success Rate (ASR) vs Query Budget\n(Lower = better defender)")
-    ax.set_xlabel("Query Budget B")
+        ax.scatter(budgets, asrs, marker=sys_markers.get(sys, "o"), s=90, label=sys,
+                   color=sys_colors.get(sys, "#333"), zorder=5, alpha=0.9)
+    ax.set_title("(A) Attack Success Rate (ASR) Across Independent Budgets\n(Discrete points: independent search evaluations per budget)")
+    ax.set_xlabel("Query Budget B (Independent Evaluations)")
     ax.set_ylabel("ASR (%)")
     ax.set_ylim(-5, 115)
     ax.set_xticks(budgets)
@@ -377,10 +378,10 @@ def fig_adversary_budget():
     ax = axes[1]
     for sys in systems:
         dets = [data[sys][f"budget_{b}"]["detected_pct"] for b in budgets]
-        ax.plot(budgets, dets, marker="s", label=sys, color=sys_colors.get(sys, "#333"),
-                linewidth=2, markersize=7)
-    ax.set_title("(B) Detection Rate vs Query Budget\n(Higher = better defender)")
-    ax.set_xlabel("Query Budget B")
+        ax.scatter(budgets, dets, marker=sys_markers.get(sys, "s"), s=90, label=sys,
+                   color=sys_colors.get(sys, "#333"), zorder=5, alpha=0.9)
+    ax.set_title("(B) Detection Rate Across Independent Budgets\n(Higher = better defender)")
+    ax.set_xlabel("Query Budget B (Independent Evaluations)")
     ax.set_ylabel("Detection Rate (%)")
     ax.set_ylim(-5, 115)
     ax.set_xticks(budgets)
